@@ -3,11 +3,13 @@
 
 import pygtk
 pygtk.require('2.0')
+import os
 import gtk
 import glib
 import webkit
 import datetime
-from pango import AttrList, AttrScale
+from keyring import Keyring
+from ConfigParser import RawConfigParser
 
 class ClockDate:
 	def __init__(self, form="%a %d %b, %H:%M"):
@@ -66,7 +68,7 @@ class Email(gtk.HBox):
 		self.show_all()
 
 class EmailPane(gtk.ScrolledWindow):
-	def __init__(self):
+	def __init__(self, domain):
 		gtk.ScrolledWindow.__init__(self)
 		self.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
 		self.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
@@ -83,6 +85,8 @@ class EmailPane(gtk.ScrolledWindow):
 		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
 
 		self.add_with_viewport(self.emailList)
+
+		self.keyring = Keyring("Email Account for "+domain, domain, "imap")
 
 		self.show_all()
 
@@ -121,6 +125,17 @@ class WeatherWidget(gtk.HBox):
 	def setIcon(self, type):
 		self.icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_weather-"+type+".png")
 
+class touchMenuConfig(RawConfigParser):
+	def __init__(self):
+		RawConfigParser.__init__(self)
+		location = os.path.expanduser('~')+'.touchmenu'
+		if os.path.exists(location):
+			self.read(location)
+		else:
+			print "No config file found!"
+			# Popup menu
+
+
 class TouchMenu:
 	def onSecond(self):
 		if not self.clock:
@@ -155,7 +170,12 @@ class TouchMenu:
 
 
 	def __init__(self):
+		glib.set_application_name("TouchMenu")
+		glib.set_prgname("TouchMenu")
+
 		self.time = ClockDate()
+
+		self.config = touchMenuConfig()
 
 		# create a new window
 		self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
@@ -216,7 +236,7 @@ class TouchMenu:
 		self.calendarView = WebPane()
 		self.calendarView.open("http://google.co.uk/")
 		self.mainWindow.append_page(self.calendarView.getScroller())
-		self.emailView = EmailPane()
+		self.emailView = EmailPane("test")
 		self.mainWindow.append_page(self.emailView)
 		self.torrentView = WebPane()
 		self.torrentView.open("http://seken.co.uk/")
