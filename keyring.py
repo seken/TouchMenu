@@ -18,6 +18,8 @@ class Keyring(object):
             return len(items) > 0
         except gkey.DeniedError:
             return False
+        except NoMatchError:
+            return False
 
     def get_credentials(self):
         attrs = {"server": self._server, "protocol": self._protocol}
