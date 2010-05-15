@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-
-# example helloworld.py
+# -*- coding: latin-1 -*-
 
 import pygtk
 pygtk.require('2.0')
@@ -8,6 +7,7 @@ import gtk
 import glib
 import webkit
 import datetime
+from pango import AttrList, AttrScale
 
 class ClockDate:
 	def __init__(self, form="%a %d %b, %H:%M"):
@@ -27,6 +27,43 @@ class RemotePane(gtk.Table):
 
 		self.show_all()
 
+class Email(gtk.HBox):
+	def __init__(self, status, subject, sender, date, body):
+		gtk.HBox.__init__(self)
+		self.set_spacing(12)
+
+		icon = gtk.Image()
+		if status == "read":
+			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-open.png")
+		elif status == "unread":
+			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-unread.png")
+		elif status == "replied":
+			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-replied.png")
+		else:
+			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-unread.png")
+		self.pack_start(icon, False)
+
+		vbox = gtk.VBox()
+		vbox.set_spacing(6)
+		self.pack_start(vbox, False)
+
+		subjectLabel = gtk.Label()
+		subjectLabel.set_use_markup(True)
+		subjectLabel.set_label('<span size="xx-large">'+subject+'</span>')
+		subjectLabel.set_alignment(0.0, 0.5)
+		vbox.pack_start(subjectLabel, False)
+
+		senderLabel = gtk.Label()
+		senderLabel.set_use_markup(True)
+		senderLabel.set_label('<span size="small">From: '+sender+'\n'+date+'</span>')
+		senderLabel.set_alignment(0.0, 0.5)
+		vbox.pack_start(senderLabel, False)
+
+		bodyLabel = gtk.Label(body[:200])
+		bodyLabel.set_alignment(0.0, 0.5)
+		vbox.pack_start(bodyLabel, False)
+		
+		self.show_all()
 
 class EmailPane(gtk.ScrolledWindow):
 	def __init__(self):
@@ -37,38 +74,13 @@ class EmailPane(gtk.ScrolledWindow):
 		self.emailList = gtk.VBox()
 		self.emailList.set_spacing(12)
 
-		self.emailList.pack_start(gtk.Button("This"))
-		self.emailList.pack_start(gtk.Button("is"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
-		self.emailList.pack_start(gtk.Button("new2"))
+		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
+		self.emailList.pack_start(Email("unread", "FOOD", "stomach", "noew!", "eat lorem ipsum dfgon asd fg asdfg as fg asf g asdfg  afsdg adfg as fgasfg\nasd fa sdf\n asd f asd f asd f asdf  d  df sdf  ds dfssdf."), False)
+		self.emailList.pack_start(Email("replied", "FOOD", "stomach", "noew!", "eat"), False)
+		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
+		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
+		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
+		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
 
 		self.add_with_viewport(self.emailList)
 
@@ -77,9 +89,6 @@ class EmailPane(gtk.ScrolledWindow):
 class WebPane(webkit.WebView):
 	def __init__(self):
 		webkit.WebView.__init__(self)
-		#settings = self.get_settings()
-		#settings.set_property("enable-developer-extras", True)
-
 		self.set_full_content_zoom(True)
 
 		self.parentScroller = gtk.ScrolledWindow()
@@ -90,6 +99,27 @@ class WebPane(webkit.WebView):
 	
 	def getScroller(self):
 		return self.parentScroller
+
+class WeatherWidget(gtk.HBox):
+	def __init__(self, location):
+		gtk.HBox.__init__(self)
+		self.set_spacing(12)
+		self.location = location
+
+		# Setup the icon
+		self.icon = gtk.Image()
+		self.icon.set_alignment(1.0, 0.5)
+		self.setIcon("sunny")
+
+		# Setup the label
+		self.temp = gtk.Label("14°C")
+		self.temp.set_alignment(0.0, 0.5)
+
+		self.pack_start(self.icon, False, False)
+		self.pack_start(self.temp, False, True)
+
+	def setIcon(self, type):
+		self.icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_weather-"+type+".png")
 
 class TouchMenu:
 	def onSecond(self):
@@ -163,6 +193,10 @@ class TouchMenu:
 		self.clock = gtk.Label(self.time.getString())
 		self.clock.set_justify(gtk.JUSTIFY_RIGHT)
 		self.clock.set_alignment(1.0, 0.5)
+
+		# Setup the weather
+		self.weather = WeatherWidget("York, UK")
+		table.attach(self.weather, 0, 1, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
     
 		# Pack button box
 		bbox.pack_start(self.remoteButton)
@@ -189,30 +223,18 @@ class TouchMenu:
 		self.mainWindow.append_page(self.torrentView.getScroller())
 
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
-		table.attach(bbox, 0, 1, 0, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
+		table.attach(bbox, 0, 1, 1, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
 		table.attach(self.mainWindow, 1, 2, 1, 2)
 
 		# Attach events
 		glib.timeout_add(1000, self.onSecond)
-
-		# This will cause the window to be destroyed by calling
-		# gtk_widget_destroy(window) when "clicked".  Again, the destroy
-		# signal could come from here, or the window manager.
 		self.quitButton.connect_object("clicked", gtk.Widget.destroy, self.window)
 		self.remoteButton.connect("clicked", self.onSwitch)
 		self.calendarButton.connect("clicked", self.onSwitch)
 		self.emailButton.connect("clicked", self.onSwitch)
 		self.torrentButton.connect("clicked", self.onSwitch)
 
-		bbox.show()
-		self.clock.show()
-		self.remoteButton.show()
-		self.emailButton.show()
-		self.calendarButton.show()
-		self.torrentButton.show()
-		self.quitButton.show()
-		table.show()
-		self.window.show()
+		self.window.show_all()
 
 	def main(self):
 		gtk.main()
