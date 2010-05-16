@@ -7,6 +7,7 @@ import os
 import sys
 import gtk
 import glib
+import dbus
 import email
 import pywapi
 import gobject
@@ -35,6 +36,34 @@ class RemotePane(gtk.Table):
 		self.set_col_spacings(12)
 
 		self.show_all()
+
+class OthersPane(gtk.Table):
+	def __init__(self):
+		gtk.Table.__init__(self, 2, 2)
+		self.set_row_spacings(12)
+		self.set_col_spacings(12)
+
+		self.killApp = gtk.Button("Kill Dash")
+		self.killApp.set_size_request(-1, 75)
+		self.killApp.connect("clicked", self.onPress)
+		self.attach(self.killApp, 0, 1, 1, 2)
+
+		self.offButton = gtk.Button("Power Off")
+		self.offButton.set_size_request(-1, 75)
+		self.offButton.connect("clicked", self.onPress)
+		self.attach(self.offButton, 1, 2, 1, 2)
+
+		self.show_all()
+
+	def onPress(self, widget, data=None):
+		action = widget.get_label()
+
+		if action == "Kill Dash":
+			# gtkmozembed hangs if we do this by the book
+			sys.exit(0)
+		elif action == "Power Off":
+			systemBus = dbus.SystemBus()
+			systemBus.get_object('org.freedesktop.ConsoleKit', '/org/freedesktop/ConsoleKit/Manager org.freedesktop.ConsoleKit.Manager.Stop')
 
 class Email(gtk.HBox):
 	def __init__(self, status, subject, sender, date, body):
@@ -164,18 +193,15 @@ class EmailPane(gtk.ScrolledWindow):
 		self.updater.start()
 		self.updater.onTrigger()
 
-		self.connect("delete_event", self.delete_event)
 		self.connect("destroy", self.destroy)
 
 		self.show_all()
 
-	def delete_event(self, widget, event, data=None):
-		self.updater.stop = True
-		self.updater.onTrigger()
-	
 	def destroy(self, widget, data=None):
 		self.updater.stop = True
+		print 'Stopping'
 		self.updater.onTrigger()
+		print 'Stop sent'
 
 	def updatePane(self, widget, emails):
 		for child in self.emailList.get_children():
@@ -287,6 +313,9 @@ class TouchMenu:
 		if pane == "Torrents":
 			self.mainWindow.set_current_page(3)
 
+		if pane == "Others":
+			self.mainWindow.set_current_page(4)
+
 
 	def __init__(self):
 		glib.set_application_name("TouchMenu")
@@ -307,6 +336,7 @@ class TouchMenu:
 		self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
 		self.window.connect("delete_event", self.delete_event)
 		self.window.connect("destroy", self.destroy)
+		self.window.set_default_size(800, 480)
     
 		# Sets the border width of the window.
 		self.window.set_border_width(12)
@@ -332,8 +362,8 @@ class TouchMenu:
 		self.calendarButton.set_size_request(-1, 75)
 		self.torrentButton = gtk.Button("Torrents")
 		self.torrentButton.set_size_request(-1, 75)
-		self.quitButton = gtk.Button("Quit")
-		self.quitButton.set_size_request(-1, 75)
+		self.othersButton = gtk.Button("Others")
+		self.othersButton.set_size_request(-1, 75)
     
 		# Setup the clock
 		self.clock = gtk.Label(self.time.getString())
@@ -349,7 +379,7 @@ class TouchMenu:
 		bbox.pack_start(self.emailButton)
 		bbox.pack_start(self.calendarButton)
 		bbox.pack_start(self.torrentButton)
-		bbox.pack_start(self.quitButton)
+		bbox.pack_start(self.othersButton)
     
 		# Main Window
 		self.mainWindow = gtk.Notebook()
@@ -360,13 +390,15 @@ class TouchMenu:
 		self.remoteView = RemotePane()
 		self.mainWindow.append_page(self.remoteView)
 		self.calendarView = WebPane()
-		self.calendarView.load_url("https://www.google.com/calendar/hosted/seken.co.uk")
+		self.calendarView.load_url(self.config.get('misc', 'calendar-address'))
 		self.mainWindow.append_page(self.calendarView)
 		self.emailView = EmailPane(self.config)
 		self.mainWindow.append_page(self.emailView)
 		self.torrentView = WebPane()
-		self.torrentView.load_url("http://seken.co.uk/")
+		self.torrentView.load_url(self.config.get('misc', 'torrent-address'))
 		self.mainWindow.append_page(self.torrentView)
+		self.othersView = OthersPane()
+		self.mainWindow.append_page(self.othersView)
 
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
 		table.attach(bbox, 0, 1, 1, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
@@ -374,7 +406,7 @@ class TouchMenu:
 
 		# Attach events
 		glib.timeout_add(2000, self.on2Seconds)
-		self.quitButton.connect_object("clicked", gtk.Widget.destroy, self.window)
+		self.othersButton.connect("clicked", self.onSwitch)
 		self.remoteButton.connect("clicked", self.onSwitch)
 		self.calendarButton.connect("clicked", self.onSwitch)
 		self.emailButton.connect("clicked", self.onSwitch)
