@@ -1,5 +1,7 @@
 __version__ = "$Revision: 14294 $"
 
+# Written by Sebastian Rittau - public domain
+
 import gtk # ensure that the application name is correctly set
 import gnomekeyring as gkey
 
