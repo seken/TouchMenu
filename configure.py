@@ -95,11 +95,13 @@ class ConfigureWindow(gtk.Window):
 		keyring.set_credentials((self.user.get_text(), self.password.get_text()))
 
 		try:
-			os.remove(os.path.expanduser("~/.touchmenu"))
+			os.remove(os.path.expanduser("~/.touchmenu/settings"))
 		except:
 			pass
 
-		config.write(open(os.path.expanduser("~/.touchmenu"), 'wb'))
+		os.mkdir(os.path.expanduser('~/.touchmenu/'))
+		os.mkdir(os.path.expanduser('~/.touchmenu/mozilla/'))
+		config.write(open(os.path.expanduser("~/.touchmenu/settings"), 'wb'))
 		gtk.main_quit()
 
 	def close(self, widget):

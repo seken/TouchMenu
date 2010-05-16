@@ -8,11 +8,14 @@ import sys
 import gtk
 import glib
 import email
-import webkit
+import pywapi
+import gobject
 import imaplib
 import datetime
-from xml.sax import saxutils
+import threading
+import gtkmozembed
 from keyring import Keyring
+from xml.sax import saxutils
 from ConfigParser import RawConfigParser
 
 class ClockDate:
@@ -69,7 +72,63 @@ class Email(gtk.HBox):
 		bodyLabel.set_alignment(0.0, 0.5)
 		vbox.pack_start(bodyLabel, False)
 		
-		self.show_all()
+		#self.show_all()
+
+class EmailThread(threading.Thread, gobject.GObject):
+	def __init__(self, pane, interval):
+		threading.Thread.__init__(self)
+		gobject.GObject.__init__(self)
+		self.waitCond = threading.Condition()
+		self.daemon = True
+		self.pane = pane
+		self.stop = False
+		glib.timeout_add(interval*60000, self.onTrigger)
+		gobject.signal_new("doneFetching", self, gobject.SIGNAL_ACTION, gobject.TYPE_NONE, (gobject.TYPE_PYOBJECT,))
+	
+	def run(self):
+		while True:
+			self.waitCond.acquire()
+			self.waitCond.wait()
+			self.waitCond.release()
+			if self.stop:
+				return
+			emails = list()
+			for i in self.pane.imapConnectors:
+				typ, messageIds = i.search(None, 'ALL')
+				messageIds = messageIds[0].split()
+				messageIds.reverse()
+				if typ != 'OK':
+					continue
+				for m in messageIds[:20]:
+					typ, data = i.fetch(m, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
+					if typ != 'OK': continue
+					email = dict()
+					email['Flags'] = imaplib.ParseFlags(data[0][0])
+					for line in data[0][1].splitlines():
+						if line == '': continue
+						bits = line.split(': ', 1)
+						try:
+							email[bits[0]] = bits[1]
+						except:
+							pass
+					typ, data = i.fetch(m, '(BODY.PEEK[TEXT])')
+					if typ != 'OK': continue
+					try:
+						email['Body'] = data[0][1].split('\r\n\r\n', 1)[1]
+					except IndexError:
+						email['Body'] = data[0][1]
+					emails.append(email)
+			# TODO sort the emails from all accounts!
+
+			print 'Fetched '+str(len(emails))+' emails.'
+			self.emit("doneFetching", emails)
+
+	def onTrigger(self):
+		self.waitCond.acquire()
+		self.waitCond.notify()
+		self.waitCond.release()
+		return True
+
 
 class EmailPane(gtk.ScrolledWindow):
 	def __init__(self, config):
@@ -79,6 +138,7 @@ class EmailPane(gtk.ScrolledWindow):
 
 		self.emailList = gtk.VBox()
 		self.emailList.set_spacing(12)
+		self.emailList.pack_start(gtk.Label('Loading emails...'))
 		self.add_with_viewport(self.emailList)
 		
 		self.imapConnectors = list()
@@ -99,39 +159,27 @@ class EmailPane(gtk.ScrolledWindow):
 				connector.select('INBOX', True)
 				self.imapConnectors.append(connector)
 
-		self.updateList()
+		self.updater = EmailThread(self, int(config.get('misc', 'email-interval')))
+		self.updater.connect("doneFetching", self.updatePane)
+		self.updater.start()
+		self.updater.onTrigger()
+
+		self.connect("delete_event", self.delete_event)
+		self.connect("destroy", self.destroy)
 
 		self.show_all()
 
-	def updateList(self):
-		emails = list()
-		for i in self.imapConnectors:
-			typ, messageIds = i.search(None, 'ALL')
-			messageIds = messageIds[0].split()
-			messageIds.reverse()
-			if typ != 'OK':
-				continue
-			for m in messageIds[:20]:
-				typ, data = i.fetch(m, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
-				if typ != 'OK': continue
-				email = dict()
-				email['Flags'] = imaplib.ParseFlags(data[0][0])
-				for line in data[0][1].splitlines():
-					if line == '': continue
-					bits = line.split(': ', 1)
-					try:
-						email[bits[0]] = bits[1]
-					except:
-						pass
-				typ, data = i.fetch(m, '(BODY.PEEK[TEXT])')
-				if typ != 'OK': continue
-				try:
-					email['Body'] = data[0][1].split('\r\n\r\n', 1)[1]
-				except IndexError:
-					email['Body'] = data[0][1]
-				emails.append(email)
-		# TODO sort the emails from all accounts!
+	def delete_event(self, widget, event, data=None):
+		self.updater.stop = True
+		self.updater.onTrigger()
+	
+	def destroy(self, widget, data=None):
+		self.updater.stop = True
+		self.updater.onTrigger()
 
+	def updatePane(self, widget, emails):
+		for child in self.emailList.get_children():
+			self.emailList.remove(child)
 		for email in emails:
 			flag = 'unread'
 			if '\\Seen' in email['Flags']:
@@ -139,27 +187,19 @@ class EmailPane(gtk.ScrolledWindow):
 			if '\\Answered' in email['Flags']:
 				flag = 'replied'
 			self.emailList.pack_start(Email(flag, email['Subject'], email['From'], email['Date'], email['Body'][:200]))
+			self.emailList.pack_start(gtk.HSeparator())
+		self.emailList.show_all()
+		self.emailList.check_resize()
 
-
-class WebPane(webkit.WebView):
+class WebPane(gtkmozembed.MozEmbed):
 	def __init__(self):
-		webkit.WebView.__init__(self)
-		self.set_full_content_zoom(True)
-
-		self.parentScroller = gtk.ScrolledWindow()
-		self.parentScroller.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
-		self.parentScroller.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
-		self.parentScroller.add(self)
-		self.parentScroller.show_all()
-	
-	def getScroller(self):
-		return self.parentScroller
+		gtkmozembed.MozEmbed.__init__(self)
 
 class WeatherWidget(gtk.HBox):
-	def __init__(self, location):
+	def __init__(self, config):
 		gtk.HBox.__init__(self)
 		self.set_spacing(12)
-		self.location = location
+		self.location = config.get('misc', 'location')
 
 		# Setup the icon
 		self.icon = gtk.Image()
@@ -167,19 +207,48 @@ class WeatherWidget(gtk.HBox):
 		self.setIcon("sunny")
 
 		# Setup the label
-		self.temp = gtk.Label("14°C")
+		self.temp = gtk.Label("Loading")
 		self.temp.set_alignment(0.0, 0.5)
 
 		self.pack_start(self.icon, False, False)
 		self.pack_start(self.temp, False, True)
 
+		self.update()
+		glib.timeout_add(60000*int(config.get('misc', 'weather-interval')), self.update)
+
 	def setIcon(self, type):
 		self.icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_weather-"+type+".png")
+
+	def update(self):
+		weather = pywapi.get_weather_from_google(self.location)
+		self.temp.set_label(weather['current_conditions']['temp_c']+'°C')
+		c = weather['current_conditions']['condition'].lower()
+		if c == 'partly sunny':
+			self.setIcon('few-clouds')
+		elif c == 'scattered thunderstorms' or c == 'thunderstorm' or c == 'storm' or c == 'chance of tstorm' or c == 'chance of storm':
+			self.setIcon('storm')
+		elif c == 'showers' or c == 'scattered showers' or c == 'rain' or c == 'chance of rain' or c == 'light rain' or c == 'sleet':
+			self.setIcon('showers')
+		elif c == 'rain and snow' or c == 'snow' or c == 'chance of snow' or c == 'light snow' or c == 'freezing drizzle' or c == 'flurries' or c == 'icy':
+			self.setIcon('snow')
+		elif c == 'overcast' or c == 'mostly cloudy' or c == 'cloudy':
+			self.setIcon('cloudy')
+		elif c == 'sunny' or c == 'clear':
+			self.setIcon('sunny')
+		elif c == 'mostly sunny' or c == 'partly cloudy':
+			self.setIcon('few-clouds')
+		elif c == 'mist' or c == 'dust' or c == 'fog' or c == 'smoke' or c == 'haze':
+			self.setIcon('fog')
+		else:
+			print "I don't know what weather icon to use!"
+			self.setIcon('severe-alert')
+
+		return True
 
 class touchMenuConfig(RawConfigParser):
 	def __init__(self):
 		RawConfigParser.__init__(self)
-		location = os.path.expanduser('~/.touchmenu')
+		location = os.path.expanduser('~/.touchmenu/settings')
 		if os.path.exists(location):
 			self.read(location)
 		else:
@@ -222,6 +291,13 @@ class TouchMenu:
 	def __init__(self):
 		glib.set_application_name("TouchMenu")
 		glib.set_prgname("TouchMenu")
+		gtk.gdk.threads_init()
+
+		if hasattr(gtkmozembed, 'set_profile_path'):
+			set_profile_path = gtkmozembed.set_profile_path
+		else:
+			set_profile_path = gtkmozembed.gtk_moz_embed_set_profile_path
+		set_profile_path(os.path.expanduser('~/.touchmenu/'), 'mozilla')
 
 		self.time = ClockDate()
 
@@ -265,7 +341,7 @@ class TouchMenu:
 		self.clock.set_alignment(1.0, 0.5)
 
 		# Setup the weather
-		self.weather = WeatherWidget(self.config.get("misc", "location"))
+		self.weather = WeatherWidget(self.config)
 		table.attach(self.weather, 0, 1, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
     
 		# Pack button box
@@ -284,13 +360,13 @@ class TouchMenu:
 		self.remoteView = RemotePane()
 		self.mainWindow.append_page(self.remoteView)
 		self.calendarView = WebPane()
-		self.calendarView.open("http://google.co.uk/")
-		self.mainWindow.append_page(self.calendarView.getScroller())
+		self.calendarView.load_url("https://www.google.com/calendar/hosted/seken.co.uk")
+		self.mainWindow.append_page(self.calendarView)
 		self.emailView = EmailPane(self.config)
 		self.mainWindow.append_page(self.emailView)
 		self.torrentView = WebPane()
-		self.torrentView.open("http://seken.co.uk/")
-		self.mainWindow.append_page(self.torrentView.getScroller())
+		self.torrentView.load_url("http://seken.co.uk/")
+		self.mainWindow.append_page(self.torrentView)
 
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
 		table.attach(bbox, 0, 1, 1, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
