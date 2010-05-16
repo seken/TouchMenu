@@ -62,8 +62,10 @@ class OthersPane(gtk.Table):
 			# gtkmozembed hangs if we do this by the book
 			sys.exit(0)
 		elif action == "Power Off":
-			systemBus = dbus.SystemBus()
-			systemBus.get_object('org.freedesktop.ConsoleKit', '/org/freedesktop/ConsoleKit/Manager org.freedesktop.ConsoleKit.Manager.Stop')
+			bus = dbus.SystemBus()
+			proxy = bus.get_object('org.freedesktop.ConsoleKit', '/org/freedesktop/ConsoleKit/Manager')
+			iface = dbus.Interface(proxy, 'org.freedesktop.ConsoleKit.Manager')
+			iface.Stop()
 
 class Email(gtk.HBox):
 	def __init__(self, status, subject, sender, date, body):
