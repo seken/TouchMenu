@@ -4,10 +4,14 @@
 import pygtk
 pygtk.require('2.0')
 import os
+import sys
 import gtk
 import glib
+import email
 import webkit
+import imaplib
 import datetime
+from xml.sax import saxutils
 from keyring import Keyring
 from ConfigParser import RawConfigParser
 
@@ -51,44 +55,91 @@ class Email(gtk.HBox):
 
 		subjectLabel = gtk.Label()
 		subjectLabel.set_use_markup(True)
-		subjectLabel.set_label('<span size="xx-large">'+subject+'</span>')
+		subjectLabel.set_label('<span size="xx-large">'+saxutils.escape(subject)+'</span>')
 		subjectLabel.set_alignment(0.0, 0.5)
 		vbox.pack_start(subjectLabel, False)
 
 		senderLabel = gtk.Label()
 		senderLabel.set_use_markup(True)
-		senderLabel.set_label('<span size="small">From: '+sender+'\n'+date+'</span>')
+		senderLabel.set_label('<span size="small">From: '+saxutils.escape(sender)+'\n'+saxutils.escape(date)+'</span>')
 		senderLabel.set_alignment(0.0, 0.5)
 		vbox.pack_start(senderLabel, False)
 
-		bodyLabel = gtk.Label(body[:200])
+		bodyLabel = gtk.Label(saxutils.escape(body[:100]))
 		bodyLabel.set_alignment(0.0, 0.5)
 		vbox.pack_start(bodyLabel, False)
 		
 		self.show_all()
 
 class EmailPane(gtk.ScrolledWindow):
-	def __init__(self, domain):
+	def __init__(self, config):
 		gtk.ScrolledWindow.__init__(self)
 		self.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
 		self.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
 
 		self.emailList = gtk.VBox()
 		self.emailList.set_spacing(12)
-
-		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
-		self.emailList.pack_start(Email("unread", "FOOD", "stomach", "noew!", "eat lorem ipsum dfgon asd fg asdfg as fg asf g asdfg  afsdg adfg as fgasfg\nasd fa sdf\n asd f asd f asd f asdf  d  df sdf  ds dfssdf."), False)
-		self.emailList.pack_start(Email("replied", "FOOD", "stomach", "noew!", "eat"), False)
-		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
-		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
-		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
-		self.emailList.pack_start(Email("read", "FOOD", "stomach", "noew!", "eat"), False)
-
 		self.add_with_viewport(self.emailList)
+		
+		self.imapConnectors = list()
 
-		self.keyring = Keyring("Email Account for "+domain, domain, "imap")
+		for i in range(int(config.get("misc", "accounts"))):
+			domain = config.get("email"+str(i), "domain")
+			port = int(config.get('email'+str(i), 'port'))
+			protocol = config.get('email'+str(i), 'protocol')
+			keyring = Keyring('TouchMenu settings for '+domain, domain, protocol)
+			if keyring.has_credentials():
+				connector = None
+				cred = keyring.get_credentials()
+				if protocol == 'imap' and port == 993:
+					connector = imaplib.IMAP4_SSL(domain, port)
+				else:
+					raise "Unrecognised"
+				connector.login(cred[0], cred[1])
+				connector.select('INBOX', True)
+				self.imapConnectors.append(connector)
+
+		self.updateList()
 
 		self.show_all()
+
+	def updateList(self):
+		emails = list()
+		for i in self.imapConnectors:
+			typ, messageIds = i.search(None, 'ALL')
+			messageIds = messageIds[0].split()
+			messageIds.reverse()
+			if typ != 'OK':
+				continue
+			for m in messageIds[:20]:
+				typ, data = i.fetch(m, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
+				if typ != 'OK': continue
+				email = dict()
+				email['Flags'] = imaplib.ParseFlags(data[0][0])
+				for line in data[0][1].splitlines():
+					if line == '': continue
+					bits = line.split(': ', 1)
+					try:
+						email[bits[0]] = bits[1]
+					except:
+						pass
+				typ, data = i.fetch(m, '(BODY.PEEK[TEXT])')
+				if typ != 'OK': continue
+				try:
+					email['Body'] = data[0][1].split('\r\n\r\n', 1)[1]
+				except IndexError:
+					email['Body'] = data[0][1]
+				emails.append(email)
+		# TODO sort the emails from all accounts!
+
+		for email in emails:
+			flag = 'unread'
+			if '\\Seen' in email['Flags']:
+				flag = 'read'
+			if '\\Answered' in email['Flags']:
+				flag = 'replied'
+			self.emailList.pack_start(Email(flag, email['Subject'], email['From'], email['Date'], email['Body'][:200]))
+
 
 class WebPane(webkit.WebView):
 	def __init__(self):
@@ -128,16 +179,15 @@ class WeatherWidget(gtk.HBox):
 class touchMenuConfig(RawConfigParser):
 	def __init__(self):
 		RawConfigParser.__init__(self)
-		location = os.path.expanduser('~')+'.touchmenu'
+		location = os.path.expanduser('~/.touchmenu')
 		if os.path.exists(location):
 			self.read(location)
 		else:
-			print "No config file found!"
-			# Popup menu
-
+			print "No config file found, run config program"
+			sys.exit(-1)
 
 class TouchMenu:
-	def onSecond(self):
+	def on2Seconds(self):
 		if not self.clock:
 			return false
 		
@@ -215,7 +265,7 @@ class TouchMenu:
 		self.clock.set_alignment(1.0, 0.5)
 
 		# Setup the weather
-		self.weather = WeatherWidget("York, UK")
+		self.weather = WeatherWidget(self.config.get("misc", "location"))
 		table.attach(self.weather, 0, 1, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
     
 		# Pack button box
@@ -236,7 +286,7 @@ class TouchMenu:
 		self.calendarView = WebPane()
 		self.calendarView.open("http://google.co.uk/")
 		self.mainWindow.append_page(self.calendarView.getScroller())
-		self.emailView = EmailPane("test")
+		self.emailView = EmailPane(self.config)
 		self.mainWindow.append_page(self.emailView)
 		self.torrentView = WebPane()
 		self.torrentView.open("http://seken.co.uk/")
@@ -247,7 +297,7 @@ class TouchMenu:
 		table.attach(self.mainWindow, 1, 2, 1, 2)
 
 		# Attach events
-		glib.timeout_add(1000, self.onSecond)
+		glib.timeout_add(2000, self.on2Seconds)
 		self.quitButton.connect_object("clicked", gtk.Widget.destroy, self.window)
 		self.remoteButton.connect("clicked", self.onSwitch)
 		self.calendarButton.connect("clicked", self.onSwitch)
