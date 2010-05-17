@@ -25,12 +25,14 @@ import sys
 import gtk
 import glib
 import dbus
+import time
 import email
 import pywapi
 import gobject
 import imaplib
 import datetime
 import threading
+import subprocess
 import gtkmozembed
 from keyring import Keyring
 from xml.sax import saxutils
@@ -46,6 +48,55 @@ class ClockDate:
 	def getTime(self):
 		return datetime.datetime.now().strftime("%H:%M")
 
+class Screen(threading.Thread):
+	def __init__(self, config):
+		threading.Thread.__init__(self)
+		self.daemon = True
+		self.days = [
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'monon').split(',')],
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'tueon').split(',')],
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'wedon').split(',')],
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'thuon').split(',')],
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'frion').split(',')],
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'saton').split(',')],
+			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'sunon').split(',')]
+		]
+		self.days[0].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'monoff').split(',')])
+		self.days[1].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'tueoff').split(',')])
+		self.days[2].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'wedoff').split(',')])
+		self.days[3].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'thuoff').split(',')])
+		self.days[4].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'frioff').split(',')])
+		self.days[5].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'satoff').split(',')])
+		self.days[6].extend([(False, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'sunoff').split(',')])
+
+		self.days = [sorted(day, key=lambda timeState:timeState[1]) for day in self.days]
+
+	def isOff():
+		# TODO xset q | grep "Monitor is On" | wc -l
+		pass
+	
+	def off(self):
+		subprocess.Popen(('xset', 'dpms', 'force', 'off'))
+
+	def on(self):
+		subprocess.Popen(('xset', 'dpms', 'force', 'on'))
+
+	def run(self):
+		while True:
+			temporal = datetime.datetime.now()
+			day = temporal.weekday()
+			temporal = temporal.time()
+			for timeState in self.days[day]:
+				if temporal > timeState[1]:
+					turn = timeState[0]
+				else:
+					break
+			if turn:
+				self.on()
+			else:
+				self.off()
+			time.sleep(120)
+	
 class RemotePane(gtk.Table):
 	def __init__(self):
 		gtk.Table.__init__(self, 2, 2)
@@ -341,6 +392,10 @@ class TouchMenu:
 		glib.set_prgname("TouchMenu")
 		gtk.gdk.threads_init()
 
+		self.config = touchMenuConfig()
+		self.screen = Screen(self.config)
+		self.screen.start()
+
 		if hasattr(gtkmozembed, 'set_profile_path'):
 			set_profile_path = gtkmozembed.set_profile_path
 		else:
@@ -348,8 +403,6 @@ class TouchMenu:
 		set_profile_path(os.path.expanduser('~/.touchmenu/'), 'mozilla')
 
 		self.time = ClockDate()
-
-		self.config = touchMenuConfig()
 
 		# create a new window
 		self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
