@@ -1,4 +1,7 @@
 #!/bin/bash
+
+echo 6 > /sys/class/backlight/openframe-bl/brightness
+
 ping -c 1 google.co.uk
 while [ $? != 0 ]
 do
