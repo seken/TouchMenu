@@ -252,8 +252,10 @@ class EmailPane(gtk.ScrolledWindow):
 				cred = keyring.get_credentials()
 				if protocol == 'imap' and port == 993:
 					connector = imaplib.IMAP4_SSL(domain, port)
+				elif protocol == 'imap' and port == 143:
+					connector = imaplib.IMAP4(domain, port)
 				else:
-					raise "Unrecognised"
+					raise "Unrecognised Email protocol/port"
 				connector.login(cred[0], cred[1])
 				connector.select('INBOX', True)
 				self.imapConnectors.append(connector)
