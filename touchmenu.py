@@ -76,10 +76,10 @@ class Screen(threading.Thread):
 		pass
 	
 	def off(self):
-		subprocess.Popen(('xset', 'dpms', 'force', 'off'))
+		subprocess.call(('xset', 'dpms', 'force', 'off'))
 
 	def on(self):
-		subprocess.Popen(('xset', 'dpms', 'force', 'on'))
+		subprocess.call(('xset', 'dpms', 'force', 'on'))
 
 	def run(self):
 		while True:
@@ -329,13 +329,9 @@ class EmailPane(gtk.ScrolledWindow):
 
 		self.connect("destroy", self.destroy)
 
-		self.show_all()
-
 	def destroy(self, widget, data=None):
 		self.updater.stop = True
-		print 'Stopping'
 		self.updater.onTrigger()
-		print 'Stop sent'
 
 	def updatePane(self, widget, emails):
 		for child in self.emailList.get_children():
@@ -400,7 +396,7 @@ class WeatherWidget(gtk.HBox):
 		elif c == 'mist' or c == 'dust' or c == 'fog' or c == 'smoke' or c == 'haze':
 			self.setIcon('fog')
 		else:
-			print "I don't know what weather icon to use!"
+			print "I don't know what weather icon to use: '" + c + "'"
 			self.setIcon('severe-alert')
 
 		return True
