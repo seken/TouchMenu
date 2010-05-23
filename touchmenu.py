@@ -95,8 +95,59 @@ class Screen(threading.Thread):
 				self.on()
 			else:
 				self.off()
-			time.sleep(120)
+			time.sleep(60)
 	
+class AlarmPane(gtk.Table):
+	def __init__(self):
+		gtk.Table.__init__(self, 2, 2)
+		self.set_row_spacings(12)
+		self.set_col_spacings(12)
+
+		addButton = gtk.Button('Add')
+		addButton.set_size_request(-1, 75)
+		self.attach(addButton, 0, 1, 0, 1, gtk.EXPAND|gtk.FILL, False)
+
+		removeButton = gtk.Button('Remove')
+		removeButton.set_size_request(-1, 75)
+		self.attach(removeButton, 1, 2, 0, 1, gtk.EXPAND|gtk.FILL, False)
+
+		self.alarms = gtk.ListStore(gobject.TYPE_BOOLEAN, gobject.TYPE_INT, gobject.TYPE_STRING)
+		self.alarms.append((True, 800, 'mon,tue,wed,thu,fri'))
+		self.alarms.append((True, 1000, 'sat,sun'))
+
+		self.alDisp = gtk.TreeView(self.alarms)
+		self.alDisp.set_headers_visible(True)
+
+		activeCol = gtk.TreeViewColumn('Active')
+		timeCol = gtk.TreeViewColumn('Time')
+		dayCol = gtk.TreeViewColumn('Day')
+
+		self.alDisp.append_column(activeCol)
+		self.alDisp.append_column(timeCol)
+		self.alDisp.append_column(dayCol)
+
+		activeCell = gtk.CellRendererToggle()
+		timeCell = gtk.CellRendererText()
+		dayCell = gtk.CellRendererText()
+
+		activeCol.pack_start(activeCell)
+		timeCol.pack_start(timeCell)
+		dayCol.pack_start(dayCell)
+
+		activeCol.set_attributes(activeCell, active=0)
+		timeCol.set_attributes(timeCell, text=1)
+		dayCol.set_attributes(dayCell, text=2)
+
+		self.attach(self.alDisp, 0, 2, 1, 2)
+
+		self.show_all()
+	
+	def onAdd(self):
+		pass
+	
+	def onRemove(self):
+		pass
+
 class RemotePane(gtk.Table):
 	def __init__(self):
 		gtk.Table.__init__(self, 2, 2)
@@ -106,8 +157,9 @@ class RemotePane(gtk.Table):
 		self.show_all()
 
 class OthersPane(gtk.Table):
-	def __init__(self):
+	def __init__(self, pane):
 		gtk.Table.__init__(self, 2, 2)
+		self.pane = pane
 		self.set_row_spacings(12)
 		self.set_col_spacings(12)
 
@@ -120,6 +172,11 @@ class OthersPane(gtk.Table):
 		self.offButton.set_size_request(-1, 75)
 		self.offButton.connect("clicked", self.onPress)
 		self.attach(self.offButton, 1, 2, 1, 2)
+
+		self.alarmButton = gtk.Button("Alarm")
+		self.alarmButton.set_size_request(-1, 75)
+		self.alarmButton.connect("clicked", self.pane.onSwitch)
+		self.attach(self.alarmButton, 0, 1, 0, 1)
 
 		self.show_all()
 
@@ -388,6 +445,9 @@ class TouchMenu:
 		if pane == "Others":
 			self.mainWindow.set_current_page(4)
 
+		if pane == "Alarm":
+			self.mainWindow.set_current_page(5)
+
 
 	def __init__(self):
 		glib.set_application_name("TouchMenu")
@@ -471,8 +531,10 @@ class TouchMenu:
 		self.torrentView = WebPane()
 		self.torrentView.load_url(self.config.get('misc', 'torrent-address'))
 		self.mainWindow.append_page(self.torrentView)
-		self.othersView = OthersPane()
+		self.othersView = OthersPane(self)
 		self.mainWindow.append_page(self.othersView)
+		self.alarmView = AlarmPane()
+		self.mainWindow.append_page(self.alarmView)
 
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
 		table.attach(bbox, 0, 1, 1, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
