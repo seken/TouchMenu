@@ -106,10 +106,12 @@ class AlarmPane(gtk.Table):
 		addButton = gtk.Button('Add')
 		addButton.set_size_request(-1, 75)
 		self.attach(addButton, 0, 1, 0, 1, gtk.EXPAND|gtk.FILL, False)
+		addButton.connect("clicked", self.onAdd)
 
 		removeButton = gtk.Button('Remove')
 		removeButton.set_size_request(-1, 75)
 		self.attach(removeButton, 1, 2, 0, 1, gtk.EXPAND|gtk.FILL, False)
+		removeButton.connect("clicked", self.onRemove)
 
 		self.alarms = gtk.ListStore(gobject.TYPE_BOOLEAN, gobject.TYPE_INT, gobject.TYPE_STRING)
 		self.alarms.append((True, 800, 'mon,tue,wed,thu,fri'))
@@ -142,10 +144,13 @@ class AlarmPane(gtk.Table):
 
 		self.show_all()
 	
-	def onAdd(self):
+	def onAdd(self, widget, data=None):
 		pass
 	
-	def onRemove(self):
+	def onRemove(self, widget, data=None):
+		selected = self.alDisp.get_selection().get_selected_rows()
+		for one in selected[1]:
+			self.alarms.remove(self.alarms.get_iter(one))
 		pass
 
 class RemotePane(gtk.Table):
