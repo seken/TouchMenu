@@ -26,7 +26,6 @@ import gtk
 import glib
 import dbus
 import time
-import email
 import pywapi
 import pygame
 import gobject
@@ -87,6 +86,7 @@ class Screen(threading.Thread):
 			temporal = datetime.datetime.now()
 			day = temporal.weekday()
 			temporal = temporal.time()
+			turn = False
 			for timeState in self.days[day]:
 				if temporal > timeState[1]:
 					turn = timeState[0]
@@ -184,7 +184,7 @@ class AlarmThread(threading.Thread):
 
 		if self.sound == 'mute':
 			self.sound = None
-		else
+		else:
 			pygame.mixer.init()
 			self.sound = pygame.mixer.Sound(self.sound)
 
@@ -591,7 +591,7 @@ class TouchMenu:
 		self.mainWindow.append_page(self.torrentView)
 		self.othersView = OthersPane(self)
 		self.mainWindow.append_page(self.othersView)
-		self.alarmView = AlarmPane()
+		self.alarmView = AlarmPane(self.config)
 		self.mainWindow.append_page(self.alarmView)
 
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
