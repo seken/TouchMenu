@@ -28,6 +28,7 @@ import dbus
 import time
 import email
 import pywapi
+import pygame
 import gobject
 import imaplib
 import datetime
@@ -98,7 +99,7 @@ class Screen(threading.Thread):
 			time.sleep(60)
 	
 class AlarmPane(gtk.Table):
-	def __init__(self):
+	def __init__(self, config):
 		gtk.Table.__init__(self, 2, 2)
 		self.set_row_spacings(12)
 		self.set_col_spacings(12)
@@ -142,6 +143,9 @@ class AlarmPane(gtk.Table):
 
 		self.attach(self.alDisp, 0, 2, 1, 2)
 
+		self.alarmThread = AlarmThread(self.alarms, config.get('alarm', 'sound'))
+		self.alarmThread.start()
+
 		self.show_all()
 	
 	def onAdd(self, widget, data=None):
@@ -152,6 +156,59 @@ class AlarmPane(gtk.Table):
 		for one in selected[1]:
 			self.alarms.remove(self.alarms.get_iter(one))
 		pass
+
+def dayToNum(day):
+	if day == 'mon':
+		return 0
+	if day == 'tue':
+		return 1
+	if day == 'wed':
+		return 2
+	if day == 'thu':
+		return 3
+	if day == 'fri':
+		return 4
+	if day == 'sat':
+		return 5
+	if day == 'sun':
+		return 6
+
+class AlarmThread(threading.Thread):
+	def __init__(self, alarms, sound):
+		threading.Thread.__init__(self)
+		self.daemon = True
+		self.alarms = alarms
+		self.sound = sound
+	
+	def run(self):
+
+		if self.sound == 'mute':
+			self.sound = None
+		else
+			pygame.mixer.init()
+			self.sound = pygame.mixer.Sound(self.sound)
+
+		while True:
+			temporal = datetime.datetime.now()
+			self.day = temporal.weekday()
+			self.time = temporal.time()
+			self.alarms.foreach(self.doCheckAlarm)
+			time.sleep(60)
+
+	def doCheckAlarm(self, model, path, iter, data=None):
+		alarm = self.alarms.get(iter, 0, 1, 2)
+		if not alarm[0]:
+			return
+		for i in alarm[2].split(','):
+			i = i.strip()
+			if dayToNum(i) == self.day:
+				if self.time.hour == alarm[1]/100 and self.time.minute == alarm[1]%100:
+					if self.sound != None:
+						self.sound.play(loops=-1, maxtime=360)
+					# TODO Trigger pane change
+				
+	def stopSound(self):
+		self.sound.stop()
 
 class RemotePane(gtk.Table):
 	def __init__(self):
