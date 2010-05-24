@@ -24,18 +24,14 @@ import os
 import sys
 import gtk
 import glib
-import dbus
 import time
 import pywapi
-import pygame
-import gobject
-import imaplib
 import datetime
 import threading
 import subprocess
 import gtkmozembed
-from keyring import Keyring
-from xml.sax import saxutils
+import modules.others
+from modules import WebPane
 from ConfigParser import RawConfigParser
 
 class ClockDate:
@@ -97,316 +93,6 @@ class Screen(threading.Thread):
 			else:
 				self.off()
 			time.sleep(60)
-	
-class AlarmPane(gtk.Table):
-	def __init__(self, config):
-		gtk.Table.__init__(self, 2, 2)
-		self.set_row_spacings(12)
-		self.set_col_spacings(12)
-
-		addButton = gtk.Button('Add')
-		addButton.set_size_request(-1, 75)
-		self.attach(addButton, 0, 1, 0, 1, gtk.EXPAND|gtk.FILL, False)
-		addButton.connect("clicked", self.onAdd)
-
-		removeButton = gtk.Button('Remove')
-		removeButton.set_size_request(-1, 75)
-		self.attach(removeButton, 1, 2, 0, 1, gtk.EXPAND|gtk.FILL, False)
-		removeButton.connect("clicked", self.onRemove)
-
-		self.alarms = gtk.ListStore(gobject.TYPE_BOOLEAN, gobject.TYPE_INT, gobject.TYPE_STRING)
-		self.alarms.append((True, 800, 'mon,tue,wed,thu,fri'))
-		self.alarms.append((True, 1000, 'sat,sun'))
-
-		self.alDisp = gtk.TreeView(self.alarms)
-		self.alDisp.set_headers_visible(True)
-
-		activeCol = gtk.TreeViewColumn('Active')
-		timeCol = gtk.TreeViewColumn('Time')
-		dayCol = gtk.TreeViewColumn('Day')
-
-		self.alDisp.append_column(activeCol)
-		self.alDisp.append_column(timeCol)
-		self.alDisp.append_column(dayCol)
-
-		activeCell = gtk.CellRendererToggle()
-		timeCell = gtk.CellRendererText()
-		dayCell = gtk.CellRendererText()
-
-		activeCol.pack_start(activeCell)
-		timeCol.pack_start(timeCell)
-		dayCol.pack_start(dayCell)
-
-		activeCol.set_attributes(activeCell, active=0)
-		timeCol.set_attributes(timeCell, text=1)
-		dayCol.set_attributes(dayCell, text=2)
-
-		self.attach(self.alDisp, 0, 2, 1, 2)
-
-		self.alarmThread = AlarmThread(self.alarms, config.get('alarm', 'sound'))
-		self.alarmThread.start()
-
-		self.show_all()
-	
-	def onAdd(self, widget, data=None):
-		pass
-	
-	def onRemove(self, widget, data=None):
-		selected = self.alDisp.get_selection().get_selected_rows()
-		for one in selected[1]:
-			self.alarms.remove(self.alarms.get_iter(one))
-		pass
-
-def dayToNum(day):
-	if day == 'mon':
-		return 0
-	if day == 'tue':
-		return 1
-	if day == 'wed':
-		return 2
-	if day == 'thu':
-		return 3
-	if day == 'fri':
-		return 4
-	if day == 'sat':
-		return 5
-	if day == 'sun':
-		return 6
-
-class AlarmThread(threading.Thread):
-	def __init__(self, alarms, sound):
-		threading.Thread.__init__(self)
-		self.daemon = True
-		self.alarms = alarms
-		self.sound = sound
-	
-	def run(self):
-
-		if self.sound == 'mute':
-			self.sound = None
-		else:
-			pygame.mixer.init()
-			self.sound = pygame.mixer.Sound(self.sound)
-
-		while True:
-			temporal = datetime.datetime.now()
-			self.day = temporal.weekday()
-			self.time = temporal.time()
-			self.alarms.foreach(self.doCheckAlarm)
-			time.sleep(60)
-
-	def doCheckAlarm(self, model, path, iter, data=None):
-		alarm = self.alarms.get(iter, 0, 1, 2)
-		if not alarm[0]:
-			return
-		for i in alarm[2].split(','):
-			i = i.strip()
-			if dayToNum(i) == self.day:
-				if self.time.hour == alarm[1]/100 and self.time.minute == alarm[1]%100:
-					if self.sound != None:
-						self.sound.play(loops=-1, maxtime=360)
-					# TODO Trigger pane change
-				
-	def stopSound(self):
-		self.sound.stop()
-
-class RemotePane(gtk.Table):
-	def __init__(self):
-		gtk.Table.__init__(self, 2, 2)
-		self.set_row_spacings(12)
-		self.set_col_spacings(12)
-
-		self.show_all()
-
-class OthersPane(gtk.Table):
-	def __init__(self, pane):
-		gtk.Table.__init__(self, 2, 2)
-		self.pane = pane
-		self.set_row_spacings(12)
-		self.set_col_spacings(12)
-
-		self.killApp = gtk.Button("Kill Dash")
-		self.killApp.set_size_request(-1, 75)
-		self.killApp.connect("clicked", self.onPress)
-		self.attach(self.killApp, 0, 1, 1, 2)
-
-		self.offButton = gtk.Button("Power Off")
-		self.offButton.set_size_request(-1, 75)
-		self.offButton.connect("clicked", self.onPress)
-		self.attach(self.offButton, 1, 2, 1, 2)
-
-		self.alarmButton = gtk.Button("Alarm")
-		self.alarmButton.set_size_request(-1, 75)
-		self.alarmButton.connect("clicked", self.pane.onSwitch)
-		self.attach(self.alarmButton, 0, 1, 0, 1)
-
-		self.show_all()
-
-	def onPress(self, widget, data=None):
-		action = widget.get_label()
-
-		if action == "Kill Dash":
-			# gtkmozembed hangs if we do this by the book
-			sys.exit(0)
-		elif action == "Power Off":
-			bus = dbus.SystemBus()
-			proxy = bus.get_object('org.freedesktop.ConsoleKit', '/org/freedesktop/ConsoleKit/Manager')
-			iface = dbus.Interface(proxy, 'org.freedesktop.ConsoleKit.Manager')
-			iface.Stop()
-
-class Email(gtk.HBox):
-	def __init__(self, status, subject, sender, date, body):
-		gtk.HBox.__init__(self)
-		self.set_spacing(12)
-
-		icon = gtk.Image()
-		if status == "read":
-			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-open.png")
-		elif status == "unread":
-			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-unread.png")
-		elif status == "replied":
-			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-replied.png")
-		else:
-			icon.set_from_file("/usr/share/icons/gnome/24x24/status/stock_mail-unread.png")
-		self.pack_start(icon, False)
-
-		vbox = gtk.VBox()
-		vbox.set_spacing(6)
-		self.pack_start(vbox, False)
-
-		subjectLabel = gtk.Label()
-		subjectLabel.set_use_markup(True)
-		subjectLabel.set_label('<span size="xx-large">'+saxutils.escape(subject)+'</span>')
-		subjectLabel.set_alignment(0.0, 0.5)
-		vbox.pack_start(subjectLabel, False)
-
-		senderLabel = gtk.Label()
-		senderLabel.set_use_markup(True)
-		senderLabel.set_label('<span size="small">From: '+saxutils.escape(sender)+'\n'+saxutils.escape(date)+'</span>')
-		senderLabel.set_alignment(0.0, 0.5)
-		vbox.pack_start(senderLabel, False)
-
-		bodyLabel = gtk.Label(saxutils.escape(body[:100]))
-		bodyLabel.set_alignment(0.0, 0.5)
-		vbox.pack_start(bodyLabel, False)
-		
-		#self.show_all()
-
-class EmailThread(threading.Thread, gobject.GObject):
-	def __init__(self, pane, interval):
-		threading.Thread.__init__(self)
-		gobject.GObject.__init__(self)
-		self.waitCond = threading.Condition()
-		self.daemon = True
-		self.pane = pane
-		self.stop = False
-		glib.timeout_add(interval*60000, self.onTrigger)
-		gobject.signal_new("doneFetching", self, gobject.SIGNAL_ACTION, gobject.TYPE_NONE, (gobject.TYPE_PYOBJECT,))
-	
-	def run(self):
-		while True:
-			self.waitCond.acquire()
-			self.waitCond.wait()
-			self.waitCond.release()
-			if self.stop:
-				return
-			emails = list()
-			for i in self.pane.imapConnectors:
-				typ, messageIds = i.search(None, 'ALL')
-				messageIds = messageIds[0].split()
-				messageIds.reverse()
-				if typ != 'OK':
-					continue
-				for m in messageIds[:20]:
-					typ, data = i.fetch(m, '(FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])')
-					if typ != 'OK': continue
-					email = dict()
-					email['Flags'] = imaplib.ParseFlags(data[0][0])
-					for line in data[0][1].splitlines():
-						if line == '': continue
-						bits = line.split(': ', 1)
-						try:
-							email[bits[0]] = bits[1]
-						except:
-							pass
-					typ, data = i.fetch(m, '(BODY.PEEK[TEXT])')
-					if typ != 'OK': continue
-					try:
-						email['Body'] = data[0][1].split('\r\n\r\n', 1)[1]
-					except IndexError:
-						email['Body'] = data[0][1]
-					emails.append(email)
-			# TODO sort the emails from all accounts!
-
-			print 'Fetched '+str(len(emails))+' emails.'
-			self.emit("doneFetching", emails)
-
-	def onTrigger(self):
-		self.waitCond.acquire()
-		self.waitCond.notify()
-		self.waitCond.release()
-		return True
-
-
-class EmailPane(gtk.ScrolledWindow):
-	def __init__(self, config):
-		gtk.ScrolledWindow.__init__(self)
-		self.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
-		self.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
-
-		self.emailList = gtk.VBox()
-		self.emailList.set_spacing(12)
-		self.emailList.pack_start(gtk.Label('Loading emails...'))
-		self.add_with_viewport(self.emailList)
-		
-		self.imapConnectors = list()
-
-		for i in range(int(config.get("misc", "accounts"))):
-			domain = config.get("email"+str(i), "domain")
-			port = int(config.get('email'+str(i), 'port'))
-			protocol = config.get('email'+str(i), 'protocol')
-			keyring = Keyring('TouchMenu settings for '+domain, domain, protocol)
-			if keyring.has_credentials():
-				connector = None
-				cred = keyring.get_credentials()
-				if protocol == 'imap' and port == 993:
-					connector = imaplib.IMAP4_SSL(domain, port)
-				elif protocol == 'imap' and port == 143:
-					connector = imaplib.IMAP4(domain, port)
-				else:
-					raise "Unrecognised Email protocol/port"
-				connector.login(cred[0], cred[1])
-				connector.select('INBOX', True)
-				self.imapConnectors.append(connector)
-
-		self.updater = EmailThread(self, int(config.get('misc', 'email-interval')))
-		self.updater.connect("doneFetching", self.updatePane)
-		self.updater.start()
-		self.updater.onTrigger()
-
-		self.connect("destroy", self.destroy)
-
-	def destroy(self, widget, data=None):
-		self.updater.stop = True
-		self.updater.onTrigger()
-
-	def updatePane(self, widget, emails):
-		for child in self.emailList.get_children():
-			self.emailList.remove(child)
-		for email in emails:
-			flag = 'unread'
-			if '\\Seen' in email['Flags']:
-				flag = 'read'
-			if '\\Answered' in email['Flags']:
-				flag = 'replied'
-			self.emailList.pack_start(Email(flag, email['Subject'], email['From'], email['Date'], email['Body'][:200]))
-			self.emailList.pack_start(gtk.HSeparator())
-		self.emailList.show_all()
-		self.emailList.check_resize()
-
-class WebPane(gtkmozembed.MozEmbed):
-	def __init__(self):
-		gtkmozembed.MozEmbed.__init__(self)
 
 class WeatherWidget(gtk.HBox):
 	def __init__(self, config):
@@ -486,26 +172,8 @@ class TouchMenu:
 		gtk.main_quit()
 
 	def onSwitch(self, widget, data=None):
-		pane = widget.get_label()
-		
-		if pane == "Remote":
-			self.mainWindow.set_current_page(0)
-
-		if pane == "Calendar":
-			self.mainWindow.set_current_page(1)
-
-		if pane == "Email":
-			self.mainWindow.set_current_page(2)
-
-		if pane == "Torrents":
-			self.mainWindow.set_current_page(3)
-
-		if pane == "Others":
-			self.mainWindow.set_current_page(4)
-
-		if pane == "Alarm":
-			self.mainWindow.set_current_page(5)
-
+		pane = widget.mod_name
+		self.mainWindow.set_current_page(self.NotebookDict[pane])
 
 	def __init__(self):
 		glib.set_application_name("TouchMenu")
@@ -515,12 +183,6 @@ class TouchMenu:
 		self.config = touchMenuConfig()
 		self.screen = Screen(self.config)
 		self.screen.start()
-
-		if hasattr(gtkmozembed, 'set_profile_path'):
-			set_profile_path = gtkmozembed.set_profile_path
-		else:
-			set_profile_path = gtkmozembed.gtk_moz_embed_set_profile_path
-		set_profile_path(os.path.expanduser('~/.touchmenu/'), 'mozilla')
 
 		self.time = ClockDate()
 
@@ -536,6 +198,9 @@ class TouchMenu:
 		# Set to full screen
 		self.window.fullscreen()
 
+		# Setup the mozilla engine
+		modules.WebPane.setup()
+
 		# Create the main layout
 		table = gtk.Table(2, 2)
 		table.set_row_spacings(12)
@@ -545,17 +210,54 @@ class TouchMenu:
 		# Setup the button box
 		bbox = gtk.VButtonBox()
 		bbox.set_spacing(12)
-    
-		self.remoteButton = gtk.Button("Remote")
-		self.remoteButton.set_size_request(-1, 75)
-		self.emailButton = gtk.Button("Email")
-		self.emailButton.set_size_request(-1, 75)
-		self.calendarButton = gtk.Button("Calendar")
-		self.calendarButton.set_size_request(-1, 75)
-		self.torrentButton = gtk.Button("Torrents")
-		self.torrentButton.set_size_request(-1, 75)
-		self.othersButton = gtk.Button("Others")
-		self.othersButton.set_size_request(-1, 75)
+
+		# Main Window
+		self.mainWindow = gtk.Notebook()
+		self.mainWindow.set_show_tabs(False)
+		self.mainWindow.set_show_border(False)
+		self.mainWindow.show()
+
+		# Load the config
+		mainModules = self.config.get('modules', 'main').split(',')
+		otherModules = self.config.get('modules', 'others').split(',')
+
+		self.NotebookDict = dict()
+		otherList = list()
+
+		# Load the main modules
+		for mod in mainModules:
+			module = 'modules.'+mod
+			__import__(module)
+			module = sys.modules[module]
+			button = module.Button()
+			button.connect('clicked', self.onSwitch)
+			button.set_size_request(-1, 75)
+			bbox.pack_start(button)
+			pane = module.Pane(button, self.config)
+			id = self.mainWindow.append_page(pane)
+			self.NotebookDict[button.mod_name] = id
+
+		# Load the other modules
+		for mod in otherModules:
+			module = 'modules.'+mod
+			__import__(module)
+			module = sys.modules[module]
+			button = module.Button()
+			button.connect('clicked', self.onSwitch)
+			#button.set_size_request(-1, 75)
+			otherList.append(button)
+			pane = module.Pane(button, self.config)
+			id = self.mainWindow.append_page(pane)
+			self.NotebookDict[button.mod_name] = id
+			
+		# Add the 'others' pane and button
+		button = modules.others.Button()
+		button.connect('clicked', self.onSwitch)
+		button.set_size_request(-1, 75)
+		bbox.pack_start(button)
+		pane = modules.others.Pane(button, self.config, otherList)
+		id = self.mainWindow.append_page(pane)
+		self.NotebookDict[button.mod_name] = id
     
 		# Setup the clock
 		self.clock = gtk.Label(self.time.getString())
@@ -566,20 +268,7 @@ class TouchMenu:
 		self.weather = WeatherWidget(self.config)
 		table.attach(self.weather, 0, 1, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
     
-		# Pack button box
-		bbox.pack_start(self.remoteButton)
-		bbox.pack_start(self.emailButton)
-		bbox.pack_start(self.calendarButton)
-		bbox.pack_start(self.torrentButton)
-		bbox.pack_start(self.othersButton)
-    
-		# Main Window
-		self.mainWindow = gtk.Notebook()
-		self.mainWindow.set_show_tabs(False)
-		self.mainWindow.set_show_border(False)
-		self.mainWindow.show()
-
-		self.remoteView = RemotePane()
+		'''self.remoteView = RemotePane()
 		self.mainWindow.append_page(self.remoteView)
 		self.calendarView = WebPane()
 		self.calendarView.load_url(self.config.get('misc', 'calendar-address'))
@@ -592,7 +281,7 @@ class TouchMenu:
 		self.othersView = OthersPane(self)
 		self.mainWindow.append_page(self.othersView)
 		self.alarmView = AlarmPane(self.config)
-		self.mainWindow.append_page(self.alarmView)
+		self.mainWindow.append_page(self.alarmView)'''
 
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
 		table.attach(bbox, 0, 1, 1, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
@@ -600,11 +289,6 @@ class TouchMenu:
 
 		# Attach events
 		glib.timeout_add(2000, self.on2Seconds)
-		self.othersButton.connect("clicked", self.onSwitch)
-		self.remoteButton.connect("clicked", self.onSwitch)
-		self.calendarButton.connect("clicked", self.onSwitch)
-		self.emailButton.connect("clicked", self.onSwitch)
-		self.torrentButton.connect("clicked", self.onSwitch)
 
 		self.window.show_all()
 
