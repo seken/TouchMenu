@@ -268,21 +268,6 @@ class TouchMenu:
 		self.weather = WeatherWidget(self.config)
 		table.attach(self.weather, 0, 1, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
     
-		'''self.remoteView = RemotePane()
-		self.mainWindow.append_page(self.remoteView)
-		self.calendarView = WebPane()
-		self.calendarView.load_url(self.config.get('misc', 'calendar-address'))
-		self.mainWindow.append_page(self.calendarView)
-		self.emailView = EmailPane(self.config)
-		self.mainWindow.append_page(self.emailView)
-		self.torrentView = WebPane()
-		self.torrentView.load_url(self.config.get('misc', 'torrent-address'))
-		self.mainWindow.append_page(self.torrentView)
-		self.othersView = OthersPane(self)
-		self.mainWindow.append_page(self.othersView)
-		self.alarmView = AlarmPane(self.config)
-		self.mainWindow.append_page(self.alarmView)'''
-
 		table.attach(self.clock, 1, 2, 0, 1, xoptions=gtk.FILL, yoptions=gtk.SHRINK)
 		table.attach(bbox, 0, 1, 1, 2, xoptions=gtk.SHRINK, yoptions=gtk.SHRINK)
 		table.attach(self.mainWindow, 1, 2, 1, 2)

@@ -5,10 +5,29 @@
   |_|\___/ \__,_|\___|_| |_|_|  |_|\___|_| |_|\__,_|
 ____________________________________________________
 
-Dependencies: -
+Dependencies
+____________________________________________________
+
 * python
 * pygtk
-* python-gktmozembed
 * pywapi
-* pygame - for sound
+* python-gktmozembed - for web apps
+* pygame - for the alarm
 
+
+Available Features
+____________________________________________________
+
+* Alarm
+* Calendar
+* Email
+* Torrent Management
+* Shutdown
+
+
+Credits
+____________________________________________________
+
+Mark Goodall
+
+Sebastian Rittau - keyring.py
