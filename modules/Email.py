@@ -60,8 +60,6 @@ class Email(gtk.HBox):
 		bodyLabel = gtk.Label(saxutils.escape(body[:100]))
 		bodyLabel.set_alignment(0.0, 0.5)
 		vbox.pack_start(bodyLabel, False)
-		
-		#self.show_all()
 
 class EmailThread(threading.Thread, gobject.GObject):
 	def __init__(self, pane, interval):

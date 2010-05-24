@@ -18,6 +18,7 @@
 import pygtk
 pygtk.require('2.0')
 import gtk
+import glib
 import time
 import pygame
 import gobject
@@ -69,8 +70,9 @@ class Pane(gtk.Table):
 
 		self.attach(self.alDisp, 0, 2, 1, 2)
 
-		self.alarmThread = AlarmThread(self.alarms, config, config.get('alarm', 'sound'))
+		self.alarmThread = AlarmThread(self, config, config.get('alarm', 'sound'))
 		self.alarmThread.start()
+		self.alarmThread.connect("alarm", self.onAlarm)
 
 		self.show_all()
 	
@@ -81,7 +83,56 @@ class Pane(gtk.Table):
 		selected = self.alDisp.get_selection().get_selected_rows()
 		for one in selected[1]:
 			self.alarms.remove(self.alarms.get_iter(one))
-		pass
+	
+	def onAlarm(self, widget, data=None):
+		window = AlarmWindow(self.alarmThread)
+		window.show_all()
+
+class AlarmWindow(gtk.Window):
+	def __init__(self, thread):
+		gtk.Window.__init__(self, gtk.WINDOW_POPUP)
+		self.set_border_width(12)
+		self.set_decorated(False)
+		self.set_position(gtk.WIN_POS_CENTER_ALWAYS)
+
+		self.alarmThread = thread
+		
+		# VBox setup
+		layout = gtk.VBox()
+		layout.set_spacing(12)
+		self.add(layout)
+
+		self.time = gtk.Label()
+		self.time.set_use_markup(True)
+		layout.pack_start(self.time)
+		self.updateClock()
+
+		snooze = gtk.Button('Snooze')
+		snooze.connect('clicked', self.onSnooze)
+		layout.pack_start(snooze)
+
+		off = gtk.Button('Off')
+		off.connect('clicked', self.close)
+		layout.pack_start(off)
+
+		glib.timeout_add(2000, self.updateClock)
+
+	def onSnooze(self, widget, data=None):
+		self.alarmThread.stopSound()
+		glib.timeout_add(600000, self.onSnoozeOver)
+	
+	def close(self, widget, data=None):
+		self.alarmThread.stopSound()
+		self.destroy()
+
+	def onSnoozeOver(self):
+		self.alarmThread.playSound()
+		return False
+
+	def updateClock(self):
+		self.time.set_label('<span size="72000">'+datetime.datetime.now().strftime("%H:%M")+'</span>')
+		return True
+
 
 def dayToNum(day):
 	if day == 'mon':
@@ -99,12 +150,15 @@ def dayToNum(day):
 	if day == 'sun':
 		return 6
 
-class AlarmThread(threading.Thread):
-	def __init__(self, alarms, config, sound):
+class AlarmThread(threading.Thread, gobject.GObject):
+	def __init__(self, pane, config, sound):
 		threading.Thread.__init__(self)
+		gobject.GObject.__init__(self)
+		gobject.signal_new("alarm", self, gobject.SIGNAL_ACTION, gobject.TYPE_NONE, ())
+
 		self.daemon = True
 		self.config = config
-		self.alarms = alarms
+		self.pane = pane
 		self.sound = sound
 	
 	def run(self):
@@ -119,11 +173,11 @@ class AlarmThread(threading.Thread):
 			temporal = datetime.datetime.now()
 			self.day = temporal.weekday()
 			self.time = temporal.time()
-			self.alarms.foreach(self.doCheckAlarm)
+			self.pane.alarms.foreach(self.doCheckAlarm)
 			time.sleep(60)
 
 	def doCheckAlarm(self, model, path, iter, data=None):
-		alarm = self.alarms.get(iter, 0, 1, 2)
+		alarm = self.pane.alarms.get(iter, 0, 1, 2)
 		if not alarm[0]:
 			return
 		for i in alarm[2].split(','):
@@ -131,12 +185,19 @@ class AlarmThread(threading.Thread):
 			if dayToNum(i) == self.day:
 				if self.time.hour == alarm[1]/100 and self.time.minute == alarm[1]%100:
 					self.config.screen.disable()
-					if self.sound != None:
-						self.sound.play(loops=-1, maxtime=360)
-					# TODO Trigger pane change
+					self.playSound()
+					gtk.gdk.threads_enter()
+					self.emit("alarm")
+					gtk.gdk.threads_leave()
 				
 	def stopSound(self):
 		self.sound.stop()
+	
+	def playSound(self):
+		print 'playing'
+		if self.sound != None:
+			self.sound.play(loops=-1, maxtime=360000)
+
 
 class Button(gtk.Button):
 	def __init__(self):
