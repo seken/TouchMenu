@@ -48,6 +48,7 @@ class Screen(threading.Thread):
 	def __init__(self, config):
 		threading.Thread.__init__(self)
 		self.daemon = True
+		self.enabled = True
 		self.days = [
 			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'monon').split(',')],
 			[(True, datetime.time(int(x)/100, int(x)%100)) for x in config.get('onoff', 'tueon').split(',')],
@@ -77,21 +78,29 @@ class Screen(threading.Thread):
 	def on(self):
 		subprocess.call(('xset', 'dpms', 'force', 'on'))
 
+	def disable(self):
+		self.enabled = False
+		self.on()
+
+	def enable(self):
+		self.enabled = True
+
 	def run(self):
 		while True:
-			temporal = datetime.datetime.now()
-			day = temporal.weekday()
-			temporal = temporal.time()
-			turn = False
-			for timeState in self.days[day]:
-				if temporal > timeState[1]:
-					turn = timeState[0]
+			if self.enabled:
+				temporal = datetime.datetime.now()
+				day = temporal.weekday()
+				temporal = temporal.time()
+				turn = False
+				for timeState in self.days[day]:
+					if temporal > timeState[1]:
+						turn = timeState[0]
+					else:
+						break
+				if turn:
+					self.on()
 				else:
-					break
-			if turn:
-				self.on()
-			else:
-				self.off()
+					self.off()
 			time.sleep(60)
 
 class WeatherWidget(gtk.HBox):
@@ -181,8 +190,8 @@ class TouchMenu:
 		gtk.gdk.threads_init()
 
 		self.config = touchMenuConfig()
-		self.screen = Screen(self.config)
-		self.screen.start()
+		self.config.screen = Screen(self.config)
+		self.config.screen.start()
 
 		self.time = ClockDate()
 
@@ -244,7 +253,6 @@ class TouchMenu:
 			module = sys.modules[module]
 			button = module.Button()
 			button.connect('clicked', self.onSwitch)
-			#button.set_size_request(-1, 75)
 			otherList.append(button)
 			pane = module.Pane(button, self.config)
 			id = self.mainWindow.append_page(pane)

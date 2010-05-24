@@ -69,7 +69,7 @@ class Pane(gtk.Table):
 
 		self.attach(self.alDisp, 0, 2, 1, 2)
 
-		self.alarmThread = AlarmThread(self.alarms, config.get('alarm', 'sound'))
+		self.alarmThread = AlarmThread(self.alarms, config, config.get('alarm', 'sound'))
 		self.alarmThread.start()
 
 		self.show_all()
@@ -100,9 +100,10 @@ def dayToNum(day):
 		return 6
 
 class AlarmThread(threading.Thread):
-	def __init__(self, alarms, sound):
+	def __init__(self, alarms, config, sound):
 		threading.Thread.__init__(self)
 		self.daemon = True
+		self.config = config
 		self.alarms = alarms
 		self.sound = sound
 	
@@ -129,6 +130,7 @@ class AlarmThread(threading.Thread):
 			i = i.strip()
 			if dayToNum(i) == self.day:
 				if self.time.hour == alarm[1]/100 and self.time.minute == alarm[1]%100:
+					self.config.screen.disable()
 					if self.sound != None:
 						self.sound.play(loops=-1, maxtime=360)
 					# TODO Trigger pane change
