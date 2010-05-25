@@ -109,10 +109,12 @@ class AlarmWindow(gtk.Window):
 
 		snooze = gtk.Button('Snooze')
 		snooze.connect('clicked', self.onSnooze)
+		snooze.set_size_request(-1, 75)
 		layout.pack_start(snooze)
 
 		off = gtk.Button('Off')
 		off.connect('clicked', self.close)
+		off.set_size_request(-1, 75)
 		layout.pack_start(off)
 
 		glib.timeout_add(2000, self.updateClock)
