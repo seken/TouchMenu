@@ -135,7 +135,7 @@ class WeatherWidget(gtk.HBox):
 			self.setIcon('few-clouds')
 		elif c == 'scattered thunderstorms' or c == 'thunderstorm' or c == 'storm' or c == 'chance of tstorm' or c == 'chance of storm':
 			self.setIcon('storm')
-		elif c == 'showers' or c == 'scattered showers' or c == 'rain' or c == 'chance of rain' or c == 'light rain' or c == 'sleet':
+		elif c == 'showers' or c == 'scattered showers' or c == 'rain' or c == 'chance of rain' or c == 'light rain' or c == 'sleet' or c =='drizzle':
 			self.setIcon('showers')
 		elif c == 'rain and snow' or c == 'snow' or c == 'chance of snow' or c == 'light snow' or c == 'freezing drizzle' or c == 'flurries' or c == 'icy':
 			self.setIcon('snow')
