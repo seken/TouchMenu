@@ -96,6 +96,8 @@ class AlarmWindow(gtk.Window):
 		self.set_position(gtk.WIN_POS_CENTER_ALWAYS)
 
 		self.alarmThread = thread
+
+		self.alarmThread.config.screen.disable()
 		
 		# VBox setup
 		layout = gtk.VBox()
@@ -125,6 +127,7 @@ class AlarmWindow(gtk.Window):
 	
 	def close(self, widget, data=None):
 		self.alarmThread.stopSound()
+		self.alarmThread.config.screen.enable()
 		self.destroy()
 
 	def onSnoozeOver(self):
