@@ -68,14 +68,25 @@ class Screen(threading.Thread):
 
 		self.days = [sorted(day, key=lambda timeState:timeState[1]) for day in self.days]
 
-	def isOff():
-		# TODO xset q | grep "Monitor is On" | wc -l
-		pass
+	def isOff(self):
+		status = subprocess.Popen(('xset', 'q'), stdout=subprocess.PIPE)
+		result = status.communicate()
+		for line in result[0].split('\n'):
+			clean = line.strip()
+			if clean.startswith('Monitor'):
+				if clean.endswith('On'):
+					return False
+				return True
+		return False
 	
 	def off(self):
+		if self.isOff():
+			return
 		subprocess.call(('xset', 'dpms', 'force', 'off'))
 
 	def on(self):
+		if not self.isOff():
+			return
 		subprocess.call(('xset', 'dpms', 'force', 'on'))
 
 	def disable(self):
